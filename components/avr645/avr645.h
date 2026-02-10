@@ -214,15 +214,35 @@ class AVR645 : public Component {
     // Even if "dB" is missing, accept the number
     return value;
   }
-
+  
   void accept() {
     struct sockaddr_storage client_addr;
     socklen_t client_addrlen = sizeof(client_addr);
-    std::unique_ptr<socket::Socket> socket = this->socket_->accept(reinterpret_cast<struct sockaddr *>(&client_addr), &client_addrlen);
-    if (!socket) return;
-
+  
+    std::unique_ptr<socket::Socket> socket =
+        this->socket_->accept(reinterpret_cast<struct sockaddr *>(&client_addr), &client_addrlen);
+    if (!socket)
+      return;
+  
     socket->setblocking(false);
-    std::string identifier = socket->getpeername();
+  
+    std::string identifier = "unknown";
+  
+    if (client_addr.ss_family == AF_INET) {
+      char ip[INET_ADDRSTRLEN];
+      auto *addr = reinterpret_cast<struct sockaddr_in *>(&client_addr);
+      inet_ntop(AF_INET, &addr->sin_addr, ip, sizeof(ip));
+      identifier = ip;
+    }
+  #if LWIP_IPV6
+    else if (client_addr.ss_family == AF_INET6) {
+      char ip[INET6_ADDRSTRLEN];
+      auto *addr = reinterpret_cast<struct sockaddr_in6 *>(&client_addr);
+      inet_ntop(AF_INET6, &addr->sin6_addr, ip, sizeof(ip));
+      identifier = ip;
+    }
+  #endif
+  
     this->clients_.emplace_back(std::move(socket), identifier, this->buf_head_);
     ESP_LOGD(TAG, "New client connected from %s", identifier.c_str());
   }
